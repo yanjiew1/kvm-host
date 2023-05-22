@@ -1,10 +1,18 @@
 include mk/common.mk
 
+ARCH ?= $(shell uname -m)
+
 CC ?= gcc
 CFLAGS = -O2
 CFLAGS += -Wall -std=gnu99
 CFLAGS += -g
+CFLAGS += -Isrc
 LDFLAGS = -lpthread
+
+ifeq ($(ARCH), x86_64)
+	CFLAGS += -DCONFIG_X86_64
+	CFLAGS += -Iarch/x86_64
+endif
 
 OUT ?= build
 BIN = $(OUT)/kvm-host
@@ -21,6 +29,11 @@ OBJS := \
 	virtio-blk.o \
 	diskimg.o \
 	main.o
+
+ifeq ($(ARCH), x86_64)
+	OBJS += arch/x86_64/vm.o
+endif
+
 OBJS := $(addprefix $(OUT)/,$(OBJS))
 deps := $(OBJS:%.o=%.o.d)
 
@@ -29,7 +42,7 @@ $(BIN): $(OBJS)
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(OUT)/%.o: src/%.c
-	$(Q)mkdir -p $(OUT)
+	$(Q)mkdir -p $(shell dirname $@)
 	$(VECHO) "  CC\t$@\n"
 	$(Q)$(CC) -o $@ $(CFLAGS) -c -MMD -MF $@.d $<
 

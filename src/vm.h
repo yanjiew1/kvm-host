@@ -12,11 +12,17 @@ typedef struct {
     void *mem;
     serial_dev_t serial;
     struct bus mmio_bus;
+#ifdef CONFIG_X86_64
     struct bus io_bus;
+#endif
     struct pci pci;
     struct diskimg diskimg;
     struct virtio_blk_dev virtio_blk_dev;
 } vm_t;
+
+int vm_arch_init(vm_t *v);
+int vm_arch_init_cpu(vm_t *v);
+int vm_arch_init_mem(vm_t *v);
 
 int vm_init(vm_t *v);
 int vm_load_image(vm_t *v, const char *image_path);
