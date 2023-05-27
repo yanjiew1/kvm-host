@@ -1,6 +1,7 @@
 include mk/common.mk
 
 ARCH ?= $(shell uname -m)
+PWD ?= $(shell pwd)
 
 CC ?= gcc
 CFLAGS = -O2
@@ -11,7 +12,11 @@ LDFLAGS = -lpthread
 
 ifeq ($(ARCH), x86_64)
 	CFLAGS += -DCONFIG_X86_64
-	CFLAGS += -Iarch/x86_64
+	CFLAGS += -I$(PWD)src/arch/x86_64
+endif
+ifeq ($(ARCH), aarch64)
+	CFLAGS += -DCONFIG_AARCH64
+	CFLAGS += -I$(PWD)/src/arch/aarch64
 endif
 
 OUT ?= build
@@ -32,6 +37,9 @@ OBJS := \
 
 ifeq ($(ARCH), x86_64)
 	OBJS += arch/x86_64/vm.o
+endif
+ifeq ($(ARCH), aarch64)
+	OBJS += arch/aarch64/vm.o
 endif
 
 OBJS := $(addprefix $(OUT)/,$(OBJS))

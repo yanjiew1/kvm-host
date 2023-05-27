@@ -6,15 +6,15 @@
 #include "pci.h"
 #include "serial.h"
 #include "virtio-blk.h"
+#include "vm-arch.h"
 
 typedef struct {
     int kvm_fd, vm_fd, vcpu_fd;
+    vm_arch_t arch;
     void *mem;
     serial_dev_t serial;
     struct bus mmio_bus;
-#ifdef CONFIG_X86_64
     struct bus io_bus;
-#endif
     struct pci pci;
     struct diskimg diskimg;
     struct virtio_blk_dev virtio_blk_dev;
