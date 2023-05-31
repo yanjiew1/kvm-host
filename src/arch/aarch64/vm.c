@@ -56,11 +56,6 @@ int vm_arch_init(vm_t *v)
     return 0;
 }
 
-int vm_arch_init_mem(vm_t *v)
-{
-    return throw_err("TODO: vm_arch_init_mem");
-}
-
 int vm_arch_init_cpu(vm_t *v)
 {
     return throw_err("TODO: vm_arch_init_cpu");

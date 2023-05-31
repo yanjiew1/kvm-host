@@ -31,8 +31,16 @@ int vm_init(vm_t *v)
     if (!v->mem)
         return throw_err("Failed to mmap vm memory");
 
-    if (vm_arch_init_mem(v) != 0)
-        return -1;
+    struct kvm_userspace_memory_region region = {
+        .slot = 0,
+        .flags = 0,
+        .guest_phys_addr = DRAM_BASE,
+        .memory_size = RAM_SIZE,
+        .userspace_addr = (__u64) v->mem,
+    };
+
+    if (ioctl(v->vm_fd, KVM_SET_USER_MEMORY_REGION, &region) < 0)
+        return throw_err("Failed to set user memory region");
 
     if ((v->vcpu_fd = ioctl(v->vm_fd, KVM_CREATE_VCPU, 0)) < 0)
         return throw_err("Failed to create vcpu");
@@ -123,9 +131,12 @@ int vm_irq_line(vm_t *v, int irq, int level)
     return 0;
 }
 
-void *vm_guest_to_host(vm_t *v, void *guest)
+void *vm_guest_to_host(vm_t *v, uint64_t guest)
 {
-    return (uintptr_t) v->mem + guest;
+    if (guest < DRAM_BASE || guest >= DRAM_BASE + RAM_SIZE)
+        return NULL;
+
+    return (void *) ((uintptr_t) v->mem + (guest - DRAM_BASE));
 }
 
 void vm_irqfd_register(vm_t *v, int fd, int gsi, int flags)
@@ -165,4 +176,12 @@ void vm_exit(vm_t *v)
     close(v->vm_fd);
     close(v->vcpu_fd);
     munmap(v->mem, RAM_SIZE);
+}
+
+void *vm_gpa2hva(vm_t *v, uint64_t hpa)
+{
+    if (hpa < DRAM_BASE || hpa >= DRAM_BASE + RAM_SIZE)
+        return NULL;
+
+    return (void *) ((uintptr_t) v->mem + (hpa - DRAM_BASE));
 }

@@ -35,6 +35,17 @@
 
 #define DRAM_BASE 0x80000000UL
 
+/* 128 MB for iernel */
+#define KERNEL_BASE DRAM_BASE
+#define KERNEL_SIZE 0x8000000UL
+
+/* 128 MB for initrd */
+#define INITRD_BASE (KERNEL_BASE + KERNEL_SIZE)
+#define INITRD_SIZE 0x8000000UL
+
+/* For DTB */
+#define DTB_BASE (INITRD_BASE + INITRD_SIZE)
+
 typedef struct {
     int gic_fd;
 } vm_arch_t;

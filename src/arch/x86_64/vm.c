@@ -87,22 +87,6 @@ int vm_arch_init(vm_t *v)
     return 0;
 }
 
-int vm_arch_init_mem(vm_t *v)
-{
-    struct kvm_userspace_memory_region region = {
-        .slot = 0,
-        .flags = 0,
-        .guest_phys_addr = 0,
-        .memory_size = RAM_SIZE,
-        .userspace_addr = (__u64) v->mem,
-    };
-
-    if (ioctl(v->vm_fd, KVM_SET_USER_MEMORY_REGION, &region) < 0)
-        return throw_err("Failed to set user memory region");
-
-    return 0;
-}
-
 int vm_arch_init_cpu(vm_t *v)
 {
     if (vm_init_regs(v) != 0)
