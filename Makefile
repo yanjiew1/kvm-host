@@ -12,7 +12,7 @@ LDFLAGS = -lpthread
 
 ifeq ($(ARCH), x86_64)
 	CFLAGS += -DCONFIG_X86_64
-	CFLAGS += -I$(PWD)src/arch/x86_64
+	CFLAGS += -I$(PWD)/src/arch/x86_64
 endif
 ifeq ($(ARCH), aarch64)
 	CFLAGS += -DCONFIG_AARCH64
