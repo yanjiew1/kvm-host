@@ -10,6 +10,7 @@
 
 typedef struct {
     int kvm_fd, vm_fd, vcpu_fd;
+    int nirq;
     vm_arch_t arch;
     void *mem;
     serial_dev_t serial;
@@ -22,6 +23,7 @@ typedef struct {
 
 int vm_arch_init(vm_t *v);
 int vm_arch_init_cpu(vm_t *v);
+int vm_arch_post_init(vm_t *v);
 
 int vm_init(vm_t *v);
 int vm_load_image(vm_t *v, const char *image_path);
@@ -39,3 +41,4 @@ void vm_ioeventfd_register(vm_t *v,
 void vm_handle_io(vm_t *v, struct kvm_run *run);
 void vm_handle_mmio(vm_t *v, struct kvm_run *run);
 void vm_exit(vm_t *v);
+int vm_alloc_irq(vm_t *v);

@@ -14,6 +14,7 @@
 #include "serial.h"
 #include "virtio-pci.h"
 #include "vm.h"
+#include "vm-arch.h"
 
 int vm_init(vm_t *v)
 {
@@ -54,6 +55,10 @@ int vm_init(vm_t *v)
     if (serial_init(&v->serial, &v->io_bus))
         return throw_err("Failed to init UART device");
     virtio_blk_init(&v->virtio_blk_dev);
+
+    if (vm_arch_post_init(v) != 0)
+        return -1;
+
     return 0;
 }
 
@@ -178,10 +183,10 @@ void vm_exit(vm_t *v)
     munmap(v->mem, RAM_SIZE);
 }
 
-void *vm_gpa2hva(vm_t *v, uint64_t hpa)
+int vm_alloc_irq(vm_t *v)
 {
-    if (hpa < DRAM_BASE || hpa >= DRAM_BASE + RAM_SIZE)
-        return NULL;
+    if (v->nirq < VM_IRQ_BASE)
+        v->nirq = VM_IRQ_BASE;
 
-    return (void *) ((uintptr_t) v->mem + (hpa - DRAM_BASE));
+    return v->nirq++;
 }

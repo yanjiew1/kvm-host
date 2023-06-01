@@ -16,17 +16,13 @@ static int vm_create_gic(vm_t *v)
         .type = KVM_DEV_TYPE_ARM_VGIC_V3,
     };
 
-    struct kvm_device_attr dist_attr = {
-        .group = KVM_DEV_ARM_VGIC_GRP_ADDR,
-        .attr = KVM_VGIC_V3_ADDR_TYPE_DIST,
-        .addr = (uint64_t) &dist_addr
-    };
+    struct kvm_device_attr dist_attr = {.group = KVM_DEV_ARM_VGIC_GRP_ADDR,
+                                        .attr = KVM_VGIC_V3_ADDR_TYPE_DIST,
+                                        .addr = (uint64_t) &dist_addr};
 
-    struct kvm_device_attr redist_attr = {
-        .group = KVM_DEV_ARM_VGIC_GRP_ADDR,
-        .attr = KVM_VGIC_V3_ADDR_TYPE_REDIST,
-        .addr = (uint64_t) &redist_addr
-    };
+    struct kvm_device_attr redist_attr = {.group = KVM_DEV_ARM_VGIC_GRP_ADDR,
+                                          .attr = KVM_VGIC_V3_ADDR_TYPE_REDIST,
+                                          .addr = (uint64_t) &redist_addr};
 
     if (ioctl(v->vm_fd, KVM_CREATE_DEVICE, &gic_device) < 0)
         return throw_err("Failed to create IRQ chip\n");
@@ -43,6 +39,33 @@ static int vm_create_gic(vm_t *v)
         close(gic_fd);
         return throw_err("Failed to set redistributer address\n");
     }
+
+    v->arch.gic_fd = gic_fd;
+
+    return 0;
+}
+
+int vm_arch_post_init(vm_t *v)
+{
+    int nirqs = v->nirq;
+
+    struct kvm_device_attr nr_irqs_attr = {
+        .group = KVM_DEV_ARM_VGIC_GRP_NR_IRQS,
+        .addr = (uint64_t) &nirqs,
+    };
+
+    struct kvm_device_attr vgic_init_attr = {
+        .group = KVM_DEV_ARM_VGIC_GRP_CTRL,
+        .attr = KVM_DEV_ARM_VGIC_CTRL_INIT,
+    };
+
+    /* setup IRQ lines */
+    if (ioctl(v->arch.gic_fd, KVM_SET_DEVICE_ATTR, &nr_irqs_attr) < 0)
+        return throw_err("Failed to set the number of IRQs\n");
+
+    /* initialize GIC */
+    if (ioctl(v->arch.gic_fd, KVM_SET_DEVICE_ATTR, &vgic_init_attr) < 0)
+        return throw_err("Failed to initialize the vgic\n");
 
     return 0;
 }

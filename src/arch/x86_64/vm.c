@@ -97,6 +97,10 @@ int vm_arch_init_cpu(vm_t *v)
     return 0;
 }
 
+int vm_arch_post_init(vm_t *v)
+{
+    return 0;
+}
 
 int vm_load_image(vm_t *v, const char *image_path)
 {

@@ -49,3 +49,12 @@
 typedef struct {
     int gic_fd;
 } vm_arch_t;
+
+/* Interrupt */
+#define ARM_GIC_SGI_BASE 0
+#define ARM_GIC_PPI_BASE 16
+#define ARM_GIC_SPI_BASE 32
+#define ARM_GIC_IRQ_MAX 992
+
+#define VM_IRQ_BASE ARM_GIC_SPI_BASE
+#define VM_IRQ_MAX ARM_GIC_IRQ_MAX
