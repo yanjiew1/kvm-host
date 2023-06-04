@@ -1,6 +1,7 @@
 #pragma once
 
 #include <asm/kvm.h>
+#include <stdint.h>
 
 #define SZ_64K (64 * 1024)
 
@@ -28,7 +29,7 @@
 #define ARM_GIC_DIST_SIZE KVM_VGIC_V3_DIST_SIZE
 
 #define ARM_GIC_REDIST_BASE (ARM_GIC_DIST_BASE + ARM_GIC_DIST_SIZE)
-#define ARM_GIC_REDIST_SIZE	KVM_VGIC_V3_REDIST_SIZE
+#define ARM_GIC_REDIST_SIZE KVM_VGIC_V3_REDIST_SIZE
 
 #define ARM_GIC_ITS_BASE (ARM_GIC_REDIST_BASE + ARM_GIC_REDIST_SIZE)
 #define ARM_GIC_ITS_SIZE KVM_VGIC_V3_ITS_SIZE
@@ -48,6 +49,7 @@
 
 typedef struct {
     int gic_fd;
+    uint64_t entry;
 } vm_arch_t;
 
 /* Interrupt */
@@ -58,3 +60,16 @@ typedef struct {
 
 #define VM_IRQ_BASE ARM_GIC_SPI_BASE
 #define VM_IRQ_MAX ARM_GIC_IRQ_MAX
+
+typedef struct {
+    uint32_t code0;       /* Executable code */
+    uint32_t code1;       /* Executable code */
+    uint64_t text_offset; /* Image load offset, little endian */
+    uint64_t image_size;  /* Effective Image size, little endian */
+    uint64_t flags;       /* kernel flags, little endian */
+    uint64_t res2;        /* reserved */
+    uint64_t res3;        /* reserved */
+    uint64_t res4;        /* reserved */
+    uint32_t magic;       /* Magic number, little endian, "ARM\x64" */
+    uint32_t res5;        /* reserved (used for PE COFF offset) */
+} arm64_kernel_header_t;

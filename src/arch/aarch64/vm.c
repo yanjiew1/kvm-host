@@ -1,6 +1,11 @@
+#include <assert.h>
+#include <fcntl.h>
 #include <linux/kvm.h>
 #include <linux/kvm_para.h>
+#include <string.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "err.h"
@@ -98,7 +103,49 @@ int vm_arch_init_cpu(vm_t *v)
 
 int vm_load_image(vm_t *v, const char *image_path)
 {
-    return throw_err("TODO: vm_load_image");
+    int fd = open(image_path, O_RDONLY);
+    if (fd < 0)
+        return 1;
+
+    struct stat st;
+    fstat(fd, &st);
+    size_t datasz = st.st_size;
+
+    if (datasz < sizeof(arm64_kernel_header_t)) {
+        close(fd);
+        return throw_err("Kernel image too small\n");
+    }
+
+    void *data = mmap(0, datasz, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    close(fd);
+
+    arm64_kernel_header_t *header = data;
+    if (header->magic != 0x644d5241U) {
+        munmap(data, datasz);
+        return throw_err("Invalid kernel image\n");
+    }
+
+    uint64_t offset;
+    if (header->image_size == 0)
+        offset = 0x80000;
+    else
+        offset = header->text_offset;
+
+    if (offset + datasz >= KERNEL_SIZE ||
+        offset + header->image_size >= KERNEL_SIZE) {
+        munmap(data, datasz);
+        return throw_err("Image size too large\n");
+    }
+
+    void *dest = vm_guest_to_host(v, KERNEL_BASE + offset);
+    assert(dest);
+
+    memmove(dest, data, datasz);
+    munmap(data, datasz);
+
+    v->arch.entry = KERNEL_BASE + offset;
+
+    return 0;
 }
 
 int vm_load_initrd(vm_t *v, const char *initrd_path)
