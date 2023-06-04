@@ -51,7 +51,7 @@ static int vm_create_gic(vm_t *v)
     return 0;
 }
 
-int vm_arch_post_init(vm_t *v)
+static int vm_init_gic(vm_t *v)
 {
     int nirqs = 992;
 
@@ -72,6 +72,14 @@ int vm_arch_post_init(vm_t *v)
     /* initialize GIC */
     if (ioctl(v->arch.gic_fd, KVM_SET_DEVICE_ATTR, &vgic_init_attr) < 0)
         return throw_err("Failed to initialize the vgic\n");
+
+    return 0;
+}
+
+int vm_arch_post_init(vm_t *v)
+{
+    if (vm_init_gic(v) < 0)
+        return -1;
 
     return 0;
 }
