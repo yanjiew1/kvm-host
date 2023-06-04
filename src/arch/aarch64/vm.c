@@ -47,7 +47,7 @@ static int vm_create_gic(vm_t *v)
 
 int vm_arch_post_init(vm_t *v)
 {
-    int nirqs = v->nirq;
+    int nirqs = 992;
 
     struct kvm_device_attr nr_irqs_attr = {
         .group = KVM_DEV_ARM_VGIC_GRP_NR_IRQS,
@@ -81,7 +81,19 @@ int vm_arch_init(vm_t *v)
 
 int vm_arch_init_cpu(vm_t *v)
 {
-    return throw_err("TODO: vm_arch_init_cpu");
+    struct kvm_vcpu_init vcpu_init;
+    if (ioctl(v->vm_fd, KVM_ARM_PREFERRED_TARGET, &vcpu_init) < 0)
+        return throw_err("Failed to find perferred target cpu type\n");
+
+    if (ioctl(v->vcpu_fd, KVM_ARM_VCPU_INIT, &vcpu_init))
+        return throw_err("Failed to initialize vCPU\n");
+
+    if (ioctl(v->kvm_fd, KVM_CHECK_EXTENSION, KVM_CAP_ARM_SVE) > 0) {
+        if (ioctl(v->vcpu_fd, KVM_ARM_VCPU_FINALIZE, KVM_ARM_VCPU_SVE) < 0)
+            return throw_err("Failed to initialize SVE feature\n");
+    }
+
+    return 0;
 }
 
 int vm_load_image(vm_t *v, const char *image_path)
