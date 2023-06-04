@@ -120,6 +120,9 @@ int vm_load_image(vm_t *v, const char *image_path)
     void *data = mmap(0, datasz, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
     close(fd);
 
+    if (data == MAP_FAILED)
+        return throw_err("Failed to mmap the kernel image\n");
+
     arm64_kernel_header_t *header = data;
     if (header->magic != 0x644d5241U) {
         munmap(data, datasz);
@@ -165,6 +168,9 @@ int vm_load_initrd(vm_t *v, const char *initrd_path)
 
     void *data = mmap(0, datasz, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
     close(fd);
+
+    if (data == MAP_FAILED)
+        return throw_err("Failed to mmap the initrd image\n");
 
     void *dest = vm_guest_to_host(v, ARM_INITRD_BASE);
     memmove(dest, data, datasz);
