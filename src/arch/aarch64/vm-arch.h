@@ -6,6 +6,12 @@
 #define SZ_64K (64 * 1024)
 
 /*
+ * The maximum size of the device tree.
+ * Reference: https://docs.kernel.org/arm64/booting.html
+ */
+#define FDT_MAX_SIZE (2 * 1024 * 1024)
+
+/*
  *  Memory map for guest memory
  *
  *  0   - 64K  PCI I/O port
@@ -62,6 +68,7 @@ typedef struct {
 #define VM_IRQ_BASE ARM_GIC_SPI_BASE
 #define VM_IRQ_MAX ARM_GIC_IRQ_MAX
 
+/* Reference https://docs.kernel.org/arm64/booting.html */
 typedef struct {
     uint32_t code0;       /* Executable code */
     uint32_t code1;       /* Executable code */
