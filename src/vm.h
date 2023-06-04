@@ -42,3 +42,4 @@ void vm_handle_io(vm_t *v, struct kvm_run *run);
 void vm_handle_mmio(vm_t *v, struct kvm_run *run);
 void vm_exit(vm_t *v);
 int vm_alloc_irq(vm_t *v);
+int vm_arch_generate_fdt(vm_t *v);

@@ -17,6 +17,7 @@ endif
 ifeq ($(ARCH), aarch64)
 	CFLAGS += -DCONFIG_AARCH64
 	CFLAGS += -I$(PWD)/src/arch/aarch64
+	CFLAGS += -DHAVE_LIBFDT
 	ifneq ($(LIBFDT),)
 		CFLGAS += -I$(LIBFDT)
 		LDFLAGS += $(LIBFDT)/libfdt.a

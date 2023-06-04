@@ -43,15 +43,16 @@
 #define DRAM_BASE 0x80000000UL
 
 /* 128 MB for iernel */
-#define KERNEL_BASE DRAM_BASE
-#define KERNEL_SIZE 0x8000000UL
+#define ARM_KERNEL_BASE DRAM_BASE
+#define ARM_KERNEL_SIZE 0x8000000UL
 
 /* 128 MB for initrd */
-#define INITRD_BASE (KERNEL_BASE + KERNEL_SIZE)
-#define INITRD_SIZE 0x8000000UL
+#define ARM_INITRD_BASE (ARM_KERNEL_BASE + ARM_KERNEL_SIZE)
+#define ARM_INITRD_SIZE 0x8000000UL
 
 /* For DTB */
-#define DTB_BASE (INITRD_BASE + INITRD_SIZE)
+#define ARM_DTB_BASE (INITRD_BASE + ARM_INITRD_SIZE)
+#define ARM_DTB_SIZE FDT_MAX_SIZE
 
 typedef struct {
     int gic_fd;
@@ -81,3 +82,4 @@ typedef struct {
     uint32_t magic;       /* Magic number, little endian, "ARM\x64" */
     uint32_t res5;        /* reserved (used for PE COFF offset) */
 } arm64_kernel_header_t;
+

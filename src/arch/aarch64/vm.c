@@ -132,19 +132,19 @@ int vm_load_image(vm_t *v, const char *image_path)
     else
         offset = header->text_offset;
 
-    if (offset + datasz >= KERNEL_SIZE ||
-        offset + header->image_size >= KERNEL_SIZE) {
+    if (offset + datasz >= ARM_KERNEL_SIZE ||
+        offset + header->image_size >= ARM_KERNEL_SIZE) {
         munmap(data, datasz);
         return throw_err("Image size too large\n");
     }
 
-    void *dest = vm_guest_to_host(v, KERNEL_BASE + offset);
+    void *dest = vm_guest_to_host(v, ARM_KERNEL_BASE + offset);
     assert(dest);
 
     memmove(dest, data, datasz);
     munmap(data, datasz);
 
-    v->arch.entry = KERNEL_BASE + offset;
+    v->arch.entry = ARM_KERNEL_BASE + offset;
 
     return 0;
 }
@@ -158,7 +158,7 @@ int vm_load_initrd(vm_t *v, const char *initrd_path)
     struct stat st;
     fstat(fd, &st);
     size_t datasz = st.st_size;
-    if (datasz > INITRD_SIZE) {
+    if (datasz > ARM_INITRD_SIZE) {
         close(fd);
         return throw_err("Initrd image too large\n");
     }
@@ -166,7 +166,7 @@ int vm_load_initrd(vm_t *v, const char *initrd_path)
     void *data = mmap(0, datasz, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
     close(fd);
 
-    void *dest = vm_guest_to_host(v, INITRD_BASE);
+    void *dest = vm_guest_to_host(v, ARM_INITRD_BASE);
     memmove(dest, data, datasz);
     munmap(data, datasz);
 
