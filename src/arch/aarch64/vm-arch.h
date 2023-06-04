@@ -50,6 +50,7 @@
 typedef struct {
     int gic_fd;
     uint64_t entry;
+    bool has_initrd;
 } vm_arch_t;
 
 /* Interrupt */

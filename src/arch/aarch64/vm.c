@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <linux/kvm.h>
 #include <linux/kvm_para.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -150,5 +151,26 @@ int vm_load_image(vm_t *v, const char *image_path)
 
 int vm_load_initrd(vm_t *v, const char *initrd_path)
 {
-    return throw_err("TODO: vm_load_initrd");
+    int fd = open(initrd_path, O_RDONLY);
+    if (fd < 0)
+        return 1;
+
+    struct stat st;
+    fstat(fd, &st);
+    size_t datasz = st.st_size;
+    if (datasz > INITRD_SIZE) {
+        close(fd);
+        return throw_err("Initrd image too large\n");
+    }
+
+    void *data = mmap(0, datasz, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    close(fd);
+
+    void *dest = vm_guest_to_host(v, INITRD_BASE);
+    memmove(dest, data, datasz);
+    munmap(data, datasz);
+
+    v->arch.has_initrd = true;
+
+    return 0;
 }
