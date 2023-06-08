@@ -53,7 +53,7 @@ static int vm_create_gic(vm_t *v)
 
 static int vm_init_gic(vm_t *v)
 {
-    int nirqs = 992;
+    int nirqs = 1024;
 
     struct kvm_device_attr nr_irqs_attr = {
         .group = KVM_DEV_ARM_VGIC_GRP_NR_IRQS,
