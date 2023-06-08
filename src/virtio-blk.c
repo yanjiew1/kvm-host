@@ -147,8 +147,7 @@ static void virtio_blk_setup(struct virtio_blk_dev *dev,
     vm_t *v = container_of(dev, vm_t, virtio_blk_dev);
 
     dev->enable = true;
-    /* FIXME: irq_num should be different to other devs */
-    dev->irq_num = 15;
+    dev->irq_num = vm_alloc_irq(v);
     dev->diskimg = diskimg;
     dev->config.capacity = diskimg->size >> 9;
     dev->ioeventfd = eventfd(0, EFD_CLOEXEC);

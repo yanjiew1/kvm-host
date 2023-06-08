@@ -13,7 +13,6 @@
 #include "utils.h"
 #include "vm.h"
 
-#define SERIAL_IRQ 4
 #define IO_READ8(data) *((uint8_t *) data)
 #define IO_WRITE8(data, value) ((uint8_t *) data)[0] = value
 
@@ -55,7 +54,7 @@ static void serial_update_irq(serial_dev_t *s)
     priv->iir = iir | 0xc0;
 
     /* FIXME: the return error of vm_irq_line should be handled */
-    vm_irq_line(container_of(s, vm_t, serial), SERIAL_IRQ,
+    vm_irq_line(container_of(s, vm_t, serial), s->irq_num,
                 iir == UART_IIR_NO_INT ? 0 /* inactive */ : 1 /* active */);
 }
 
@@ -215,6 +214,7 @@ static void handler(int sig, siginfo_t *si, void *uc) {}
 int serial_init(serial_dev_t *s, struct bus *bus)
 {
     sigset_t mask;
+    vm_t *v = container_of(s, vm_t, serial);
 
     struct sigaction sa = {.sa_flags = SA_SIGINFO, .sa_sigaction = handler};
     sigemptyset(&sa.sa_mask);
@@ -240,6 +240,11 @@ int serial_init(serial_dev_t *s, struct bus *bus)
     if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
         return throw_err("Failed to unblock timer signal");
 
+    #ifdef CONFIG_X86_64
+    s->irq_num = 4;
+    #else
+    s->irq_num = vm_alloc_irq(v);
+    #endif
     dev_init(&s->dev, COM1_PORT_BASE, COM1_PORT_SIZE, s, serial_handle_io);
     bus_register_dev(bus, &s->dev);
 
