@@ -1,14 +1,13 @@
 #pragma once
 
-#define RAM_SIZE (1 << 30)
-#define KERNEL_OPTS "console=ttyS0 pci=conf1"
+#define RAM_SIZE ((uint64_t)(1 << 30))
 
 #include "pci.h"
 #include "serial.h"
 #include "virtio-blk.h"
 #include "vm-arch.h"
 
-typedef struct {
+typedef struct vm {
     int kvm_fd, vm_fd, vcpu_fd;
     int nirq;
     vm_arch_t arch;
@@ -23,7 +22,7 @@ typedef struct {
 
 int vm_arch_init(vm_t *v);
 int vm_arch_init_cpu(vm_t *v);
-int vm_arch_post_init(vm_t *v);
+int vm_arch_late_init(vm_t *v);
 
 int vm_init(vm_t *v);
 int vm_load_image(vm_t *v, const char *image_path);

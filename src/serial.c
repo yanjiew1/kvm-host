@@ -240,11 +240,11 @@ int serial_init(serial_dev_t *s, struct bus *bus)
     if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
         return throw_err("Failed to unblock timer signal");
 
-    #ifdef CONFIG_X86_64
+#ifdef CONFIG_X86_64
     s->irq_num = 4;
-    #else
+#else
     s->irq_num = vm_alloc_irq(v);
-    #endif
+#endif
     dev_init(&s->dev, COM1_PORT_BASE, COM1_PORT_SIZE, s, serial_handle_io);
     bus_register_dev(bus, &s->dev);
 

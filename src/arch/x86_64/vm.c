@@ -185,3 +185,17 @@ int vm_load_initrd(vm_t *v, const char *initrd_path)
     munmap(data, datasz);
     return 0;
 }
+
+int vm_irq_line(vm_t *v, int irq, int level)
+{
+    struct kvm_irq_level irq_level = {
+        {.irq = irq},
+        .level = level,
+    };
+
+    if (ioctl(v->vm_fd, KVM_IRQ_LINE, &irq_level) < 0)
+        return throw_err("Failed to set the status of an IRQ line");
+
+    return 0;
+}
+

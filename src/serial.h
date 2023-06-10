@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include "bus.h"
 
+/* FIXME: Consider other architectures. Do not hard-code */
 #define COM1_PORT_BASE 0x03f8
 #define COM1_PORT_SIZE 8
 

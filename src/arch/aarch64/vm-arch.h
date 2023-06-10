@@ -3,6 +3,11 @@
 #include <asm/kvm.h>
 #include <stdint.h>
 
+typedef struct vm vm_t;
+
+#define KERNEL_OPTS "console=ttyS0"
+#define ARM_MPIDR_HWID_BITMASK	0xFF00FFFFFFUL
+
 #define SZ_64K (64 * 1024)
 
 /*
@@ -14,8 +19,8 @@
 /*
  *  Memory map for guest memory
  *
- *  0   - 64K  PCI I/O port
- *  64K - 16M  GIC
+ *    0 - 64K  I/O Ports
+ *   1M - 16M  GIC
  *  16M - 32M  Platform MMIO: UART, RTC, PVTIME
  *  32M - 48M  Flash
  *  48M - 1GB  Virtio MMIO
@@ -26,7 +31,7 @@
 #define ARM_IOPORT_BASE 0
 #define ARM_IOPORT_SIZE (64 * 1024)
 
-#define ARM_GIC_BASE 0x10000UL
+#define ARM_GIC_BASE 0x100000UL
 
 #define ARM_GIC_CPUI_BASE ARM_GIC_BASE
 #define ARM_GIC_CPUI_SIZE 0x20000
@@ -50,14 +55,14 @@
 #define ARM_INITRD_BASE (ARM_KERNEL_BASE + ARM_KERNEL_SIZE)
 #define ARM_INITRD_SIZE 0x8000000UL
 
-/* For DTB */
-#define ARM_DTB_BASE (INITRD_BASE + ARM_INITRD_SIZE)
-#define ARM_DTB_SIZE FDT_MAX_SIZE
+/* For FTB */
+#define ARM_FDT_BASE (ARM_INITRD_BASE + ARM_INITRD_SIZE)
+#define ARM_FDT_SIZE FDT_MAX_SIZE
 
 typedef struct {
     int gic_fd;
     uint64_t entry;
-    bool has_initrd;
+    size_t initrd_sz;
 } vm_arch_t;
 
 /* Interrupt */
@@ -83,3 +88,4 @@ typedef struct {
     uint32_t res5;        /* reserved (used for PE COFF offset) */
 } arm64_kernel_header_t;
 
+int vm_arch_get_mpidr(vm_t *v, uint64_t *mpidr);

@@ -18,6 +18,9 @@
 
 int vm_init(vm_t *v)
 {
+    /* Clear vm_t structure */
+    memset(v, 0, sizeof(*v));
+
     if ((v->kvm_fd = open("/dev/kvm", O_RDWR)) < 0)
         return throw_err("Failed to open /dev/kvm");
 
@@ -56,9 +59,6 @@ int vm_init(vm_t *v)
         return throw_err("Failed to init UART device");
     virtio_blk_init(&v->virtio_blk_dev);
 
-    if (vm_arch_post_init(v) != 0)
-        return -1;
-
     return 0;
 }
 
@@ -85,7 +85,12 @@ void vm_handle_io(vm_t *v, struct kvm_run *run)
 
 void vm_handle_mmio(vm_t *v, struct kvm_run *run)
 {
-    bus_handle_io(&v->mmio_bus, run->mmio.data, run->mmio.is_write,
+    struct bus *bus = &v->mmio_bus;
+    #ifdef CONFIG_AARCH64
+    if (run->mmio.phys_addr < 0x10000)
+        bus = &v->io_bus;
+    #endif
+    bus_handle_io(bus, run->mmio.data, run->mmio.is_write,
                   run->mmio.phys_addr, run->mmio.len);
 }
 
@@ -94,6 +99,9 @@ int vm_run(vm_t *v)
     int run_size = ioctl(v->kvm_fd, KVM_GET_VCPU_MMAP_SIZE, 0);
     struct kvm_run *run =
         mmap(0, run_size, PROT_READ | PROT_WRITE, MAP_SHARED, v->vcpu_fd, 0);
+
+    if (vm_arch_late_init(v) != 0)
+        return -1;
 
     while (1) {
         int err = ioctl(v->vcpu_fd, KVM_RUN, 0);
@@ -121,19 +129,6 @@ int vm_run(vm_t *v)
             return -1;
         }
     }
-}
-
-int vm_irq_line(vm_t *v, int irq, int level)
-{
-    struct kvm_irq_level irq_level = {
-        {.irq = irq},
-        .level = level,
-    };
-
-    if (ioctl(v->vm_fd, KVM_IRQ_LINE, &irq_level) < 0)
-        return throw_err("Failed to set the status of an IRQ line");
-
-    return 0;
 }
 
 void *vm_guest_to_host(vm_t *v, uint64_t guest)

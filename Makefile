@@ -19,7 +19,7 @@ ifeq ($(ARCH), aarch64)
 	CFLAGS += -I$(PWD)/src/arch/aarch64
 	CFLAGS += -DHAVE_LIBFDT
 	ifneq ($(LIBFDT),)
-		CFLGAS += -I$(LIBFDT)
+		CFLAGS += -I$(LIBFDT)
 		LDFLAGS += $(LIBFDT)/libfdt.a
 	else
 		LDFLAGS += -lfdt
@@ -46,7 +46,8 @@ ifeq ($(ARCH), x86_64)
 	OBJS += arch/x86_64/vm.o
 endif
 ifeq ($(ARCH), aarch64)
-	OBJS += arch/aarch64/vm.o
+	OBJS += arch/aarch64/vm.o \
+			arch/aarch64/fdt.o
 endif
 
 OBJS := $(addprefix $(OUT)/,$(OBJS))

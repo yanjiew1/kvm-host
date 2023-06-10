@@ -1,8 +1,10 @@
+#include <asm/kvm.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <linux/kvm.h>
 #include <linux/kvm_para.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -53,7 +55,9 @@ static int vm_create_gic(vm_t *v)
 
 static int vm_init_gic(vm_t *v)
 {
-    int nirqs = 1024;
+    /* Although the kernel document says that the maximum number can be set is
+     * 1024, the fact is that the maximum number of IRQs is 992 */
+    int nirqs = 992;
 
     struct kvm_device_attr nr_irqs_attr = {
         .group = KVM_DEV_ARM_VGIC_GRP_NR_IRQS,
@@ -76,9 +80,54 @@ static int vm_init_gic(vm_t *v)
     return 0;
 }
 
-int vm_arch_post_init(vm_t *v)
+static int vm_init_reg(vm_t *v)
+{
+    struct kvm_one_reg reg;
+    uint64_t data;
+
+    reg.addr = (uint64_t) &data;
+#define _REG(r)                                                   \
+    (KVM_REG_ARM_CORE_REG(r) | KVM_REG_ARM_CORE | KVM_REG_ARM64 | \
+     KVM_REG_SIZE_U64)
+    /* Set PSTATE: Mask all interrupts */
+    data = PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT | PSR_MODE_EL1h;
+    reg.id = _REG(regs.pstate);
+    if (ioctl(v->vcpu_fd, KVM_SET_ONE_REG, &reg) < 0)
+        return throw_err("Failed to set PSTATE register\n");
+
+    /* Clear x1 ~ x3 */
+    for (int i = 0; i < 3; i++) {
+        data = 0;
+        reg.id = _REG(regs.regs[i]);
+        if (ioctl(v->vcpu_fd, KVM_SET_ONE_REG, &reg) < 0)
+            return throw_err("Failed to set x%d\n", i);
+    }
+
+    /* Set x0 to device tree */
+    data = ARM_FDT_BASE;
+    reg.id = _REG(regs.regs[0]);
+    if (ioctl(v->vcpu_fd, KVM_SET_ONE_REG, &reg) < 0)
+        return throw_err("Failed to set x0\n");
+
+    /* Set program counter */
+    data = v->arch.entry;
+    reg.id = _REG(regs.pc);
+    if (ioctl(v->vcpu_fd, KVM_SET_ONE_REG, &reg) < 0)
+        return throw_err("Failed to set program counter\n");
+
+#undef _REG
+    return 0;
+}
+
+int vm_arch_late_init(vm_t *v)
 {
     if (vm_init_gic(v) < 0)
+        return -1;
+
+    if (vm_arch_generate_fdt(v) < 0)
+        return -1;
+
+    if (vm_init_reg(v) < 0)
         return -1;
 
     return 0;
@@ -90,6 +139,10 @@ int vm_arch_init(vm_t *v)
     if (vm_create_gic(v) < 0)
         return -1;
 
+    struct kvm_enable_cap cap = {.cap = KVM_CAP_ARM_NISV_TO_USER};
+
+    ioctl(v->vm_fd, KVM_ENABLE_CAP, &cap);
+
     return 0;
 }
 
@@ -98,6 +151,8 @@ int vm_arch_init_cpu(vm_t *v)
     struct kvm_vcpu_init vcpu_init;
     if (ioctl(v->vm_fd, KVM_ARM_PREFERRED_TARGET, &vcpu_init) < 0)
         return throw_err("Failed to find perferred target cpu type\n");
+
+    vcpu_init.features[0] |= (1UL << KVM_ARM_VCPU_PSCI_0_2);
 
     if (ioctl(v->vcpu_fd, KVM_ARM_VCPU_INIT, &vcpu_init))
         return throw_err("Failed to initialize vCPU\n");
@@ -184,7 +239,37 @@ int vm_load_initrd(vm_t *v, const char *initrd_path)
     memmove(dest, data, datasz);
     munmap(data, datasz);
 
-    v->arch.has_initrd = true;
+    v->arch.initrd_sz = datasz;
+
+    return 0;
+}
+
+int vm_arch_get_mpidr(vm_t *v, uint64_t *mpidr)
+{
+    struct kvm_one_reg reg;
+    reg.addr = (uint64_t) mpidr;
+    /* Reference:
+     * https://developer.arm.com/documentation/ddi0601/2022-03/AArch64-Registers/MPIDR-EL1--Multiprocessor-Affinity-Register?lang=en*/
+    reg.id = ARM64_SYS_REG(3, 0, 0, 0, 5);
+
+    if (ioctl(v->vcpu_fd, KVM_GET_ONE_REG, &reg) < 0)
+        return throw_err("Failed to get MPIDR register\n");
+
+    return 0;
+}
+
+int vm_irq_line(vm_t *v, int irq, int level)
+{
+    struct kvm_irq_level irq_level = {
+        .level = level,
+    };
+
+    irq_level.irq = (KVM_ARM_IRQ_TYPE_SPI << KVM_ARM_IRQ_TYPE_SHIFT) |
+                    (irq & KVM_ARM_IRQ_NUM_MASK);
+
+    if (ioctl(v->vm_fd, KVM_IRQ_LINE, &irq_level) < 0)
+        return throw_err("Failed to set the status of an IRQ line, %llx\n",
+                         irq_level.irq);
 
     return 0;
 }
