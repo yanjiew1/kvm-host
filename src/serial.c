@@ -26,6 +26,10 @@
 #define IER_MASK 0x0f
 #define MCR_MASK 0x3f
 #define FCR_MASK 0xe9
+#define DEFAULT_MSR UART_MSR_DCD | UART_MSR_DSR | UART_MSR_CTS
+
+#define SERIAL_EPOLL_OTHER 0
+#define SERIAL_EPOLL_EVENT 1
 
 struct serial_dev_priv {
     /* Device registers */
@@ -44,6 +48,7 @@ struct serial_dev_priv {
     /* Buffers */
     struct fifo tx_buf;
     struct fifo rx_buf;
+    uint8_t rxtrig;
 
     /* File descriptors */
     int infd;
@@ -61,12 +66,7 @@ struct serial_dev_priv {
     bool initialized;
 };
 
-static struct serial_dev_priv serial_dev_priv = {
-    .iir = UART_IIR_NO_INT,
-    .mcr = UART_MCR_OUT2,
-    .lsr = UART_LSR_TEMT | UART_LSR_THRE,
-    .msr = UART_MSR_DCD | UART_MSR_DSR | UART_MSR_CTS,
-};
+static struct serial_dev_priv serial_dev_priv;
 
 static void serial_signal(serial_dev_t *s)
 {
@@ -81,30 +81,35 @@ static void serial_update_irq(serial_dev_t *s)
 {
     struct serial_dev_priv *priv = (struct serial_dev_priv *) s->priv;
     uint8_t iir = UART_IIR_NO_INT;
+    uint8_t oiir = priv->iir;
 
+    if ((priv->ier & UART_IER_RLSI) && (priv->lsr & UART_LSR_BRK_ERROR_BITS))
+        iir = UART_IIR_RLSI;
     /* If enable receiver data interrupt and receiver data ready */
-    if ((priv->ier & UART_IER_RDI) && (priv->lsr & UART_LSR_DR))
-        iir = UART_IIR_RDI;
+    else if ((priv->ier & UART_IER_RDI) && (priv->lsr & UART_LSR_DR))
+        iir = fifo_level(&priv->rx_buf) < priv->rxtrig ? UART_IIR_RX_TIMEOUT
+                                                       : UART_IIR_RDI;
     /* If enable transmiter data interrupt and transmiter empty */
     else if ((priv->ier & UART_IER_THRI) && (priv->lsr & UART_LSR_THRE) &&
              priv->thr_ipending)
         iir = UART_IIR_THRI;
+    else if ((priv->msr & UART_MSR_ANY_DELTA) && (priv->lsr & UART_IER_MSI))
+        iir = UART_IIR_MSI;
 
     priv->iir = iir;
     if (priv->fcr & UART_FCR_ENABLE_FIFO) {
         priv->iir |= 0xc0;
-        if ((priv->lcr & UART_LCR_DLAB) && (priv->fcr & UART_FCR7_64BYTE))
+        if (priv->fcr & UART_FCR7_64BYTE)
             priv->iir |= 0x20;
     }
-
     /* FIXME: the return error of vm_irq_line should be handled */
-    vm_irq_line(container_of(s, vm_t, serial), SERIAL_IRQ,
-                iir == UART_IIR_NO_INT ? 0 /* inactive */ : 1 /* active */);
+    if ((oiir & UART_IIR_NO_INT) != (iir & UART_IIR_NO_INT)) {
+        vm_irq_line(container_of(s, vm_t, serial), SERIAL_IRQ,
+                    !(iir & UART_IIR_NO_INT));
+    }
 }
 
-#define FREQ_NS ((int) (1.0e6))
-#define NS_PER_SEC ((int) (1.0e9))
-
+/* Read from stdin and write the data to rx_buf */
 static void serial_receive(serial_dev_t *s)
 {
     struct serial_dev_priv *priv = (struct serial_dev_priv *) s->priv;
@@ -130,16 +135,18 @@ static void serial_receive(serial_dev_t *s)
         iovc = 2;
     }
     len = readv(priv->infd, iov, iovc);
-    if (len > 0)
-        priv->rx_buf.tail += len;
+    if (len < 1)
+        return;
+    priv->rx_buf.tail += len;
     pthread_mutex_lock(&priv->lock);
-    if (!(priv->lsr & UART_LSR_DR) && !fifo_is_empty(&priv->rx_buf)) {
+    if (!fifo_is_empty(&priv->rx_buf)) {
         priv->lsr |= UART_LSR_DR;
         serial_update_irq(s);
     }
     pthread_mutex_unlock(&priv->lock);
 }
 
+/* Read from tx_buf and write the data to stdout */
 static void serial_transmit(serial_dev_t *s)
 {
     struct serial_dev_priv *priv = (struct serial_dev_priv *) s->priv;
@@ -165,17 +172,16 @@ static void serial_transmit(serial_dev_t *s)
         iovc = 2;
     }
     len = writev(priv->outfd, iov, iovc);
-    if (len > 0)
-        priv->tx_buf.head += len;
+    if (len < 1)
+        return;
+    priv->tx_buf.head += len;
+    pthread_mutex_lock(&priv->lock);
     if (fifo_is_empty(&priv->tx_buf)) {
-        pthread_mutex_lock(&priv->lock);
-        if (!(priv->lsr & UART_LSR_THRE) && fifo_is_empty(&priv->tx_buf)) {
-            priv->lsr |= UART_LSR_THRE | UART_LSR_TEMT;
-            priv->thr_ipending = true;
-            serial_update_irq(s);
-        }
-        pthread_mutex_unlock(&priv->lock);
+        priv->lsr |= UART_LSR_THRE | UART_LSR_TEMT;
+        priv->thr_ipending = true;
+        serial_update_irq(s);
     }
+    pthread_mutex_unlock(&priv->lock);
 }
 
 static void serial_loopback(serial_dev_t *s)
@@ -188,15 +194,14 @@ static void serial_loopback(serial_dev_t *s)
             break;
         fifo_put(&priv->rx_buf, tmp);
     }
-
-    if (fifo_is_empty(&priv->tx_buf)) {
-        priv->lsr |= UART_LSR_TEMT | UART_LSR_THRE;        
+    if (!(priv->mcr & UART_MCR_AFE) && !fifo_is_empty(&priv->tx_buf)) {
+        fifo_clear(&priv->tx_buf);
+        priv->lsr |= UART_LSR_OE;
     }
-
-    if (!fifo_is_empty(&priv->rx_buf)) {
+    if (fifo_is_empty(&priv->tx_buf))
+        priv->lsr |= UART_LSR_TEMT | UART_LSR_THRE;
+    if (!fifo_is_empty(&priv->rx_buf))
         priv->lsr |= UART_LSR_DR;
-    }
-
     serial_update_irq(s);
 }
 
@@ -222,6 +227,41 @@ static void *serial_thread(serial_dev_t *s)
     return NULL;
 }
 
+static void serial_set_trigger_level(serial_dev_t *s)
+{
+    struct serial_dev_priv *priv = (struct serial_dev_priv *) s->priv;
+    const uint8_t trigs[] = {1, 16, 32, 56};
+    if (!(priv->fcr & UART_FCR_ENABLE_FIFO)) {
+        priv->rxtrig = 1;
+        return;
+    }
+    int trigbits = UART_FCR_R_TRIG_BITS(priv->fcr);
+    priv->rxtrig = trigs[trigbits];
+}
+
+static void serial_set_msr(serial_dev_t *s, uint8_t msr)
+{
+    struct serial_dev_priv *priv = (struct serial_dev_priv *) s->priv;
+    uint8_t omsr = priv->mcr;
+    msr &= UART_MSR_ANY_DELTA;
+    msr |= (omsr & UART_MSR_ANY_DELTA);
+
+    if ((msr & UART_MSR_DSR) != (omsr & UART_MSR_DSR))
+        msr |= UART_MSR_DDSR;
+    if (((msr & UART_MSR_CTS) != (omsr & UART_MSR_CTS)) &&
+        !(priv->mcr & UART_MCR_AFE))
+        msr |= UART_MSR_DCTS;
+    if (!(msr & UART_MSR_RI) && (omsr & UART_MSR_RI))
+        msr |= UART_MSR_RI;
+    if ((msr & UART_MSR_DCD) != (omsr & UART_MSR_DCD))
+        msr |= UART_MSR_DDCD;
+
+    pthread_mutex_lock(&priv->lock);
+    priv->msr = msr;
+    serial_update_irq(s);
+    pthread_mutex_unlock(&priv->lock);
+}
+
 static void serial_in(serial_dev_t *s, uint16_t offset, void *data)
 {
     struct serial_dev_priv *priv = (struct serial_dev_priv *) s->priv;
@@ -230,29 +270,29 @@ static void serial_in(serial_dev_t *s, uint16_t offset, void *data)
     case UART_RX:
         if (priv->lcr & UART_LCR_DLAB) {
             IO_WRITE8(data, priv->dll);
-        } else {
-            if (fifo_is_empty(&priv->rx_buf)) {
-                IO_WRITE8(data, 0);
-                break;
-            }
-
-            uint8_t value;
-            if (fifo_get(&priv->rx_buf, value))
-                IO_WRITE8(data, value);
-            int level = fifo_level(&priv->rx_buf);
-            if (level == 0) {
-                pthread_mutex_lock(&priv->lock);
-                /* check again the fifo level before modify the register */
-                level = fifo_level(&priv->rx_buf);
-                if (level == 0) {
-                    priv->lsr &= ~UART_LSR_DR;
-                    serial_update_irq(s);
-                }
-                pthread_mutex_unlock(&priv->lock);
-            }
-            if (level == FIFO_LEN - 1)
-                serial_signal(s);
+            break;
         }
+        if (priv->mcr & UART_MCR_LOOP)
+            serial_loopback(s);
+        if (fifo_is_empty(&priv->rx_buf)) {
+            IO_WRITE8(data, 0);
+            break;
+        }
+        uint8_t value;
+        if (fifo_get(&priv->rx_buf, value))
+            IO_WRITE8(data, value);
+        int level = fifo_level(&priv->rx_buf);
+        if (level == 0 || level == priv->rxtrig - 1) {
+            pthread_mutex_lock(&priv->lock);
+            /* check again the fifo level before modify the register */
+            level = fifo_level(&priv->rx_buf);
+            if (level == 0)
+                priv->lsr &= ~UART_LSR_DR;
+            serial_update_irq(s);
+            pthread_mutex_unlock(&priv->lock);
+        }
+        if (level == FIFO_LEN - 1)
+            serial_signal(s);
         break;
     case UART_IER:
         if (priv->lcr & UART_LCR_DLAB)
@@ -285,6 +325,10 @@ static void serial_in(serial_dev_t *s, uint16_t offset, void *data)
         break;
     case UART_MSR:
         IO_WRITE8(data, priv->msr);
+        pthread_mutex_lock(&priv->lock);
+        priv->msr &= ~UART_MSR_ANY_DELTA;
+        serial_update_irq(s);
+        pthread_mutex_unlock(&priv->lock);
         break;
     case UART_SCR:
         IO_WRITE8(data, priv->scr);
@@ -301,20 +345,16 @@ static void serial_out(serial_dev_t *s, uint16_t offset, void *data)
     switch (offset) {
     case UART_TX:
         if (priv->lcr & UART_LCR_DLAB) {
-            priv->dll = IO_READ8(data);
+            priv->dll = value;
             break;
         }
-        if (fifo_is_full(&priv->tx_buf))
+        if (!fifo_put(&priv->tx_buf, value))
             break;
-
-        fifo_put(&priv->tx_buf, value);
-
         if (priv->mcr & UART_MCR_LOOP) {
             /* Loopback mode, drain tx */
             serial_loopback(s);
             break;
         }
-
         int level = fifo_level(&priv->tx_buf);
         if (level == 1) {
             pthread_mutex_lock(&priv->lock);
@@ -328,60 +368,73 @@ static void serial_out(serial_dev_t *s, uint16_t offset, void *data)
         }
         if (level == 1)
             serial_signal(s);
-
         break;
     case UART_IER:
-        if (!(priv->lcr & UART_LCR_DLAB)) {
-            pthread_mutex_lock(&priv->lock);
-            priv->ier = IO_READ8(data) & IER_MASK;
-            serial_update_irq(s);
-            pthread_mutex_unlock(&priv->lock);
-        } else {
-            priv->dlm = IO_READ8(data);
+        if (priv->lcr & UART_LCR_DLAB) {
+            priv->dlm = value;
+            break;
         }
+        pthread_mutex_lock(&priv->lock);
+        priv->ier = IO_READ8(data) & IER_MASK;
+        serial_update_irq(s);
+        pthread_mutex_unlock(&priv->lock);
         break;
     case UART_FCR:
-        value = IO_READ8(data);
-        pthread_mutex_lock(&priv->lock);
-        priv->fcr = IO_READ8(data) & FCR_MASK;
-        if (value & (UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT)) {
-            if (value & UART_FCR_CLEAR_RCVR) {
-                fifo_clear(&priv->rx_buf);
-                priv->lsr &= ~UART_LSR_DR;
-            }
-            if (value & UART_FCR_CLEAR_XMIT) {
-                fifo_clear(&priv->tx_buf);
-                priv->lsr |= UART_LSR_TEMT | UART_LSR_THRE;
-                priv->thr_ipending = true;
-            }
+        if (!(priv->lcr & UART_LCR_DLAB)) {
+            /* 64-byte FIFO can only be set when DLAB bit enabled */
+            value &= ~UART_FCR7_64BYTE;
         }
+        pthread_mutex_lock(&priv->lock);
+        priv->fcr = value & FCR_MASK;
+        if (value & UART_FCR_CLEAR_RCVR) {
+            /* Clear receive buffer */
+            fifo_clear(&priv->rx_buf);
+            priv->lsr &= ~UART_LSR_DR;
+        }
+        if (value & UART_FCR_CLEAR_XMIT) {
+            /* Clear transmit buffer */
+            fifo_clear(&priv->tx_buf);
+            priv->lsr |= UART_LSR_TEMT | UART_LSR_THRE;
+            priv->thr_ipending = true;
+        }
+        serial_set_trigger_level(s);
         serial_update_irq(s);
         pthread_mutex_unlock(&priv->lock);
         break;
     case UART_LCR:
-        priv->lcr = IO_READ8(data);
         pthread_mutex_lock(&priv->lock);
+        priv->lcr = value;
         serial_update_irq(s);
         pthread_mutex_unlock(&priv->lock);
         break;
     case UART_MCR:
         orig = priv->mcr;
-        value = IO_READ8(data);
-        priv->mcr = IO_READ8(data) & MCR_MASK;
+        priv->mcr = value & MCR_MASK;
         if ((orig & UART_MCR_LOOP) && !(value & UART_MCR_LOOP)) {
+            /* Leave the loopback mode */
             serial_loopback(s);
+            serial_set_msr(s, DEFAULT_MSR);
             pthread_mutex_unlock(&priv->loopback_lock);
         }
         if (!(orig & UART_MCR_LOOP) && (value & UART_MCR_LOOP)) {
+            /* Enter the loopback mode */
             pthread_mutex_lock(&priv->loopback_lock);
             serial_loopback(s);
+        }
+        if (value & UART_MCR_LOOP) {
+            /* In loopback mode, the output pins are wired to the input pins */
+            uint8_t msr;
+            msr = (value & 0xc0U) << 4;
+            msr |= (value & 0x02U) << 3;
+            msr |= (value & 0x01U) << 5;
+            serial_set_msr(s, msr);
         }
         break;
     case UART_LSR: /* factory test */
     case UART_MSR: /* not used */
         break;
     case UART_SCR:
-        priv->scr = IO_READ8(data);
+        priv->scr = value;
         break;
     default:
         break;
@@ -443,29 +496,37 @@ int serial_init(serial_dev_t *s, struct bus *bus)
 
     /* Setup epoll */
     event.events = EPOLLIN;
-    event.data.u64 = 1;
+    event.data.u64 = SERIAL_EPOLL_EVENT;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, evfd, &event) < 0) {
         throw_err("Failed to add eventfd to epoll\n");
         goto err;
     }
-
     event.events = EPOLLIN | EPOLLET;
-    event.data.u64 = 0;
+    event.data.u64 = SERIAL_EPOLL_OTHER;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, infd, &event) < 0) {
         throw_err("Failed to add stdin to epoll\n");
         goto err;
     }
-
     event.events = EPOLLOUT | EPOLLET;
-    event.data.u64 = 0;
+    event.data.u64 = SERIAL_EPOLL_OTHER;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, outfd, &event) < 0) {
-        throw_err("Failed to add stdout to epoll\n");
-        goto err;
+        if (errno != EPERM) {
+            throw_err("Failed to add stdout to epoll\n");
+            goto err;
+        }
     }
 
-    /* Setup registry and buffers */
+    /* Setup registers and buffers */
     fifo_clear(&priv->tx_buf);
     fifo_clear(&priv->rx_buf);
+    priv->ier = 0;
+    priv->iir = UART_IIR_NO_INT;
+    priv->lcr = 0;
+    priv->mcr = 0;
+    priv->lsr = UART_LSR_TEMT | UART_LSR_THRE;
+    priv->msr = DEFAULT_MSR;
+    priv->fcr = 0;
+    priv->rxtrig = 1;
 
     /* Setup mutex */
     pthread_mutex_init(&priv->lock, NULL);
