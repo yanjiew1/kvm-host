@@ -43,10 +43,12 @@ OBJS := \
 	main.o
 
 ifeq ($(ARCH), x86_64)
-	OBJS += arch/x86_64/vm.o
+	OBJS += arch/x86_64/vm.o \
+			arch/x86_64/pci.o
 endif
 ifeq ($(ARCH), aarch64)
 	OBJS += arch/aarch64/vm.o \
+			arch/x86_64/pci.o \
 			arch/aarch64/fdt.o
 endif
 

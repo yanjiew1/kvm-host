@@ -17,6 +17,8 @@
 #include "err.h"
 #include "vm.h"
 
+#define SERIAL_IRQ 4
+
 static int vm_init_regs(vm_t *v)
 {
     struct kvm_sregs sregs;
@@ -93,6 +95,17 @@ int vm_arch_init_cpu(vm_t *v)
         return -1;
 
     vm_init_cpu_id(v);
+
+    return 0;
+}
+
+int vm_arch_init_platform_devices(vm_t *v)
+{
+    bus_init(&v->io_bus);
+    bus_init(&v->mmio_bus);
+    pci_init(&v->pci, &v->io_bus, NULL);
+    if (serial_init(&v->serial, &v->io_bus, SERIAL_IRQ))
+        return throw_err("Failed to init UART device");
 
     return 0;
 }
@@ -199,3 +212,21 @@ int vm_irq_line(vm_t *v, int irq, int level)
     return 0;
 }
 
+void vm_handle_io(vm_t *v, struct kvm_run *run)
+{
+    uint64_t addr = run->io.port;
+    void *data = (void *) run + run->io.data_offset;
+    bool is_write = run->io.direction == KVM_EXIT_IO_OUT;
+
+    for (int i = 0; i < run->io.count; i++) {
+        bus_handle_io(&v->io_bus, data, is_write, addr, run->io.size);
+        addr += run->io.size;
+    }
+}
+
+void vm_handle_mmio(vm_t *v, struct kvm_run *run)
+{
+    struct bus *bus = &v->mmio_bus;
+    bus_handle_io(bus, run->mmio.data, run->mmio.is_write, run->mmio.phys_addr,
+                  run->mmio.len);
+}

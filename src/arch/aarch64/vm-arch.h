@@ -29,7 +29,7 @@ typedef struct vm vm_t;
  */
 
 #define ARM_IOPORT_BASE 0
-#define ARM_IOPORT_SIZE (64 * 1024)
+#define ARM_IOPORT_SIZE (1UL << 16)
 
 #define ARM_GIC_BASE 0x100000UL
 
@@ -44,6 +44,12 @@ typedef struct vm vm_t;
 
 #define ARM_GIC_ITS_BASE (ARM_GIC_REDIST_BASE + ARM_GIC_REDIST_SIZE)
 #define ARM_GIC_ITS_SIZE KVM_VGIC_V3_ITS_SIZE
+
+#define ARM_PCI_CFG_BASE 0x40000000UL
+#define ARM_PCI_CFG_SIZE (1UL << 28)
+
+#define ARM_PCI_MMIO_BASE (ARM_PCI_CFG_BASE + ARM_PCI_MMIO_BASE)
+#define ARM_PCI_MMIO_SIZE (DRAM_BASE - ARM_PCI_MMIO_BASE)
 
 #define DRAM_BASE 0x80000000UL
 

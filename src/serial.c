@@ -480,9 +480,8 @@ static void serial_handle_io(void *owner,
     serial_op(s, offset, data);
 }
 
-int serial_init(serial_dev_t *s, struct bus *bus)
+int serial_init(serial_dev_t *s, struct bus *bus, int irq_num)
 {
-    vm_t *v = container_of(s, vm_t, serial);
     struct serial_dev_priv *priv = &serial_dev_priv;
     struct epoll_event event;
 
@@ -555,11 +554,7 @@ int serial_init(serial_dev_t *s, struct bus *bus)
         goto err;
     }
 
-#ifdef CONFIG_X86_64
-    s->irq_num = 4;
-#else
-    s->irq_num = vm_alloc_irq(v);
-#endif
+    s->irq_num = irq_num;
     dev_init(&s->dev, COM1_PORT_BASE, COM1_PORT_SIZE, s, serial_handle_io);
     bus_register_dev(bus, &s->dev);
 

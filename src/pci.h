@@ -35,6 +35,7 @@ struct pci_dev {
     struct bus *io_bus;
     struct bus *mmio_bus;
     struct bus *pci_bus;
+    uint64_t mmio_addr;
 };
 
 struct pci {
@@ -42,6 +43,7 @@ struct pci {
     struct bus pci_bus;
     struct dev pci_bus_dev;
     struct dev pci_addr_dev;
+    struct dev pci_mmio_dev;
 };
 
 void pci_set_bar(struct pci_dev *dev,
@@ -55,4 +57,5 @@ void pci_dev_init(struct pci_dev *dev,
                   struct pci *pci,
                   struct bus *io_bus,
                   struct bus *mmio_bus);
-void pci_init();
+void pci_init(struct pci *pci, struct bus *io_bus, struct bus *bus);
+void pci_arch_init(struct pci *pci, dev_io_fn addr_io, dev_io_fn data_io, dev_io_fn mmio_io);

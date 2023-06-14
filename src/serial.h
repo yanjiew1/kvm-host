@@ -17,5 +17,5 @@ struct serial_dev {
 };
 
 void serial_console(serial_dev_t *s);
-int serial_init(serial_dev_t *s, struct bus *bus);
+int serial_init(serial_dev_t *s, struct bus *bus, int irq_num);
 void serial_exit(serial_dev_t *s);

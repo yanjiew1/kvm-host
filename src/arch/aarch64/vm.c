@@ -119,20 +119,6 @@ static int vm_init_reg(vm_t *v)
     return 0;
 }
 
-int vm_arch_late_init(vm_t *v)
-{
-    if (vm_init_gic(v) < 0)
-        return -1;
-
-    if (vm_arch_generate_fdt(v) < 0)
-        return -1;
-
-    if (vm_init_reg(v) < 0)
-        return -1;
-
-    return 0;
-}
-
 int vm_arch_init(vm_t *v)
 {
     /* Create IRQ chip */
@@ -244,6 +230,31 @@ int vm_load_initrd(vm_t *v, const char *initrd_path)
     return 0;
 }
 
+int vm_arch_init_platform_devices(vm_t *v)
+{
+    bus_init(&v->io_bus);
+    bus_init(&v->mmio_bus);
+    pci_init(&v->pci, NULL, &v->mmio_bus);
+    if (serial_init(&v->serial, &v->io_bus, vm_alloc_irq(v)))
+        return throw_err("Failed to init UART device");
+
+    return 0;
+}
+
+int vm_arch_late_init(vm_t *v)
+{
+    if (vm_init_gic(v) < 0)
+        return -1;
+
+    if (vm_arch_generate_fdt(v) < 0)
+        return -1;
+
+    if (vm_init_reg(v) < 0)
+        return -1;
+
+    return 0;
+}
+
 int vm_arch_get_mpidr(vm_t *v, uint64_t *mpidr)
 {
     struct kvm_one_reg reg;
@@ -272,4 +283,21 @@ int vm_irq_line(vm_t *v, int irq, int level)
                          irq_level.irq);
 
     return 0;
+}
+
+void vm_handle_io(vm_t *v, struct kvm_run *run)
+{
+    /* This should not be called on aarch64 architecture. */
+    assert(false);
+}
+
+void vm_handle_mmio(vm_t *v, struct kvm_run *run)
+{
+    struct bus *bus = &v->mmio_bus;
+
+    if (run->mmio.phys_addr < 0x10000)
+        bus = &v->io_bus;
+
+    bus_handle_io(bus, run->mmio.data, run->mmio.is_write, run->mmio.phys_addr,
+                  run->mmio.len);
 }

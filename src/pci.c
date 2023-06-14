@@ -128,6 +128,16 @@ static void pci_data_io(void *owner,
     bus_handle_io(&pci->pci_bus, data, is_write, addr, size);
 }
 
+static void pci_mmio_io(void *owner,
+                        void *data,
+                        uint8_t is_write,
+                        uint64_t offset,
+                        uint8_t size)
+{
+    struct pci *pci = (struct pci *) owner;
+    bus_handle_io(&pci->pci_bus, data, is_write, offset, size);
+}
+
 void pci_set_bar(struct pci_dev *dev,
                  uint8_t bar,
                  uint32_t bar_size,
@@ -170,16 +180,15 @@ void pci_dev_register(struct pci_dev *dev)
     bus_register_dev(dev->pci_bus, &dev->config_dev);
 }
 
-#define PCI_CONFIG_ADDR 0xCF8
-#define PCI_CONFIG_DATA 0xCFC
-
-void pci_init(struct pci *pci, struct bus *io_bus)
+void pci_init(struct pci *pci, struct bus *io_bus, struct bus *bus)
 {
-    dev_init(&pci->pci_addr_dev, PCI_CONFIG_ADDR, sizeof(uint32_t), pci,
-             pci_address_io);
-    dev_init(&pci->pci_bus_dev, PCI_CONFIG_DATA, sizeof(uint32_t), pci,
-             pci_data_io);
+    pci_arch_init(pci, pci_address_io, pci_data_io, pci_mmio_io);
     bus_init(&pci->pci_bus);
-    bus_register_dev(io_bus, &pci->pci_addr_dev);
-    bus_register_dev(io_bus, &pci->pci_bus_dev);
+    if (io_bus) {
+        bus_register_dev(io_bus, &pci->pci_addr_dev);
+        bus_register_dev(io_bus, &pci->pci_bus_dev);
+    }
+    if (bus) {
+        bus_register_dev(bus, &pci->pci_mmio_dev);
+    }
 }

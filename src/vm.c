@@ -13,23 +13,11 @@
 #include "pci.h"
 #include "serial.h"
 #include "virtio-pci.h"
-#include "vm.h"
 #include "vm-arch.h"
+#include "vm.h"
 
-int vm_init(vm_t *v)
+static int_fast32_t vm_init_ram(vm_t *v)
 {
-    /* Clear vm_t structure */
-    memset(v, 0, sizeof(*v));
-
-    if ((v->kvm_fd = open("/dev/kvm", O_RDWR)) < 0)
-        return throw_err("Failed to open /dev/kvm");
-
-    if ((v->vm_fd = ioctl(v->kvm_fd, KVM_CREATE_VM, 0)) < 0)
-        return throw_err("Failed to create vm");
-
-    if (vm_arch_init(v) != 0)
-        return -1;
-
     v->mem = mmap(NULL, RAM_SIZE, PROT_READ | PROT_WRITE,
                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (!v->mem)
@@ -46,18 +34,39 @@ int vm_init(vm_t *v)
     if (ioctl(v->vm_fd, KVM_SET_USER_MEMORY_REGION, &region) < 0)
         return throw_err("Failed to set user memory region");
 
+    return 0;
+}
+
+static int vm_init_vcpu(vm_t *v)
+{
     if ((v->vcpu_fd = ioctl(v->vm_fd, KVM_CREATE_VCPU, 0)) < 0)
         return throw_err("Failed to create vcpu");
 
     if (vm_arch_init_cpu(v) != 0)
         return -1;
 
-    bus_init(&v->io_bus);
-    bus_init(&v->mmio_bus);
-    pci_init(&v->pci, &v->io_bus);
-    if (serial_init(&v->serial, &v->io_bus))
-        return throw_err("Failed to init UART device");
-    virtio_blk_init(&v->virtio_blk_dev);
+    return 0;
+}
+
+int vm_init(vm_t *v)
+{
+    /* Clear vm_t structure */
+    memset(v, 0, sizeof(*v));
+
+    if ((v->kvm_fd = open("/dev/kvm", O_RDWR)) < 0)
+        return throw_err("Failed to open /dev/kvm");
+
+    if ((v->vm_fd = ioctl(v->kvm_fd, KVM_CREATE_VM, 0)) < 0)
+        return throw_err("Failed to create vm");
+
+    if (vm_arch_init(v) != 0)
+        return -1;
+
+    if (vm_init_ram(v) != 0)
+        return -1;
+
+    if (vm_init_vcpu(v) != 0)
+        return -1;
 
     return 0;
 }
@@ -71,27 +80,17 @@ int vm_load_diskimg(vm_t *v, const char *diskimg_file)
     return 0;
 }
 
-void vm_handle_io(vm_t *v, struct kvm_run *run)
+int vm_late_init(vm_t *v)
 {
-    uint64_t addr = run->io.port;
-    void *data = (void *) run + run->io.data_offset;
-    bool is_write = run->io.direction == KVM_EXIT_IO_OUT;
+    if (vm_arch_init_platform_devices(v) != 0)
+        return -1;
 
-    for (int i = 0; i < run->io.count; i++) {
-        bus_handle_io(&v->io_bus, data, is_write, addr, run->io.size);
-        addr += run->io.size;
-    }
-}
+    virtio_blk_init(&v->virtio_blk_dev);
 
-void vm_handle_mmio(vm_t *v, struct kvm_run *run)
-{
-    struct bus *bus = &v->mmio_bus;
-    #ifdef CONFIG_AARCH64
-    if (run->mmio.phys_addr < 0x10000)
-        bus = &v->io_bus;
-    #endif
-    bus_handle_io(bus, run->mmio.data, run->mmio.is_write,
-                  run->mmio.phys_addr, run->mmio.len);
+    if (vm_arch_late_init(v) != 0)
+        return -1;
+
+    return 0;
 }
 
 int vm_run(vm_t *v)
@@ -99,9 +98,6 @@ int vm_run(vm_t *v)
     int run_size = ioctl(v->kvm_fd, KVM_GET_VCPU_MMAP_SIZE, 0);
     struct kvm_run *run =
         mmap(0, run_size, PROT_READ | PROT_WRITE, MAP_SHARED, v->vcpu_fd, 0);
-
-    if (vm_arch_late_init(v) != 0)
-        return -1;
 
     while (1) {
         int err = ioctl(v->vcpu_fd, KVM_RUN, 0);
