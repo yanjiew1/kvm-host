@@ -110,7 +110,7 @@ int vm_arch_init_platform_devices(vm_t *v)
     return 0;
 }
 
-int vm_arch_post_init(vm_t *v)
+int vm_arch_late_init(vm_t *v)
 {
     return 0;
 }
