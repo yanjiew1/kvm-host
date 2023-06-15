@@ -17,13 +17,8 @@ endif
 ifeq ($(ARCH), aarch64)
 	CFLAGS += -DCONFIG_AARCH64
 	CFLAGS += -I$(PWD)/src/arch/aarch64
+	CFLAGS += -I$(PWD)/src/fdt
 	CFLAGS += -DHAVE_LIBFDT
-	ifneq ($(LIBFDT),)
-		CFLAGS += -I$(LIBFDT)
-		LDFLAGS += $(LIBFDT)/libfdt.a
-	else
-		LDFLAGS += -lfdt
-	endif
 endif
 
 OUT ?= build
@@ -42,6 +37,11 @@ OBJS := \
 	diskimg.o \
 	main.o
 
+FDT_OBJS := \
+	fdt/fdt_sw.o \
+	fdt/fdt.o \
+	fdt/fdt_strerror.o
+
 ifeq ($(ARCH), x86_64)
 	OBJS += arch/x86_64/vm.o \
 			arch/x86_64/pci.o
@@ -49,7 +49,8 @@ endif
 ifeq ($(ARCH), aarch64)
 	OBJS += arch/aarch64/vm.o \
 			arch/aarch64/pci.o \
-			arch/aarch64/fdt.o
+			arch/aarch64/fdt.o \
+			$(FDT_OBJS)
 endif
 
 OBJS := $(addprefix $(OUT)/,$(OBJS))
