@@ -238,14 +238,14 @@ int vm_arch_init_platform_devices(vm_t *v)
     if (serial_init(&v->serial, &v->io_bus, vm_alloc_irq(v)))
         return throw_err("Failed to init UART device");
 
+    if (vm_init_gic(v) < 0)
+        return -1;
+
     return 0;
 }
 
 int vm_arch_late_init(vm_t *v)
 {
-    if (vm_init_gic(v) < 0)
-        return -1;
-
     if (vm_arch_generate_fdt(v) < 0)
         return -1;
 
@@ -276,7 +276,7 @@ int vm_irq_line(vm_t *v, int irq, int level)
     };
 
     irq_level.irq = (KVM_ARM_IRQ_TYPE_SPI << KVM_ARM_IRQ_TYPE_SHIFT) |
-                    (irq & KVM_ARM_IRQ_NUM_MASK);
+                    ((irq + ARM_GIC_SPI_BASE) & KVM_ARM_IRQ_NUM_MASK);
 
     if (ioctl(v->vm_fd, KVM_IRQ_LINE, &irq_level) < 0)
         return throw_err("Failed to set the status of an IRQ line, %llx\n",

@@ -97,17 +97,63 @@ int vm_arch_generate_fdt(vm_t *v)
     /* Serial device */
     /* The node name of the serial device is different from kvmtool. */
     _FDT(fdt_begin_node(fdt, "uart"));
-    _FDT(fdt_property_string(fdt, "compatible", "ns8250"));
+    _FDT(fdt_property_string(fdt, "compatible", "ns16550a"));
     _FDT(fdt_property_cell(fdt, "clock-frequency", 1843200));
     uint64_t serial_reg[] = {cpu_to_fdt64(COM1_PORT_BASE),
                              cpu_to_fdt64(COM1_PORT_SIZE)};
     _FDT(fdt_property(fdt, "reg", &serial_reg, sizeof(serial_reg)));
     uint32_t serial_irq[] = {cpu_to_fdt32(GIC_FDT_IRQ_TYPE_SPI),
-                             cpu_to_fdt32(v->serial.irq_num - ARM_GIC_SPI_BASE),
+                             cpu_to_fdt32(v->serial.irq_num),
                              cpu_to_fdt32(4)};
     _FDT(fdt_property(fdt, "interrupts", &serial_irq, sizeof(serial_irq)));
     _FDT(fdt_end_node(fdt));
+
     /* TODO: create /pci node */
+    _FDT(fdt_begin_node(fdt, "pci"));
+    _FDT(fdt_property_string(fdt, "device_type", "pci"));
+    _FDT(fdt_property_cell(fdt, "#address-cells", 3));
+    _FDT(fdt_property_cell(fdt, "#size-cells", 2));
+    _FDT(fdt_property_cell(fdt, "#interrupt-cells", 1));
+    _FDT(fdt_property_string(fdt, "compatible", "pci-host-cam-generic"));
+    _FDT(fdt_property(fdt, "dma-coherent", NULL, 0));
+    uint32_t pci_bus_range[] = {cpu_to_fdt32(0), cpu_to_fdt32(0)};
+    _FDT(fdt_property(fdt, "bus-range", &pci_bus_range, sizeof(pci_bus_range)));
+    uint64_t pci_reg[] = {cpu_to_fdt64(ARM_PCI_CFG_BASE),
+                          cpu_to_fdt64(0x1000000)};
+    _FDT(fdt_property(fdt, "reg", &pci_reg, sizeof(pci_reg)));
+    struct {
+        uint32_t pci_hi;
+        uint64_t pci_addr;
+        uint64_t cpu_addr;
+        uint64_t size;
+    }__attribute__((packed)) pci_ranges[] = {
+        {cpu_to_fdt32(0x02000000L), cpu_to_fdt64(ARM_PCI_MMIO_BASE),
+         cpu_to_fdt64(ARM_PCI_MMIO_BASE),
+         cpu_to_fdt64(ARM_PCI_MMIO_SIZE)}, /* For MMIO */
+        {cpu_to_fdt32(0x01000000L), cpu_to_fdt64(ARM_PCI_IO_BASE),
+         cpu_to_fdt64(ARM_PCI_IO_BASE),
+         cpu_to_fdt64(ARM_PCI_IO_SIZE)} /* For Port I/O */
+    };
+    _FDT(fdt_property(fdt, "ranges", &pci_ranges, sizeof(pci_ranges)));
+    /* Currently only virtio-blk device */
+    struct virtio_blk_dev *virtio_blk = &v->virtio_blk_dev;
+    struct pci_dev *virtio_blk_pci = (struct pci_dev *) virtio_blk;
+    struct {
+        uint32_t pci_hi;
+        uint64_t pci_addr;
+        uint32_t pci_irq;
+        uint32_t intc;
+        uint64_t intc_addr;
+        uint32_t gic_type;
+        uint32_t gic_irqn;
+        uint32_t gic_irq_type;
+    } __attribute__((packed)) pci_irq_map[] = {
+        {cpu_to_fdt32(virtio_blk_pci->config_dev.base & ~(1UL << 31)), 0, cpu_to_fdt32(1),
+         cpu_to_fdt32(PHANDLE_GIC), 0, cpu_to_fdt32(GIC_FDT_IRQ_TYPE_SPI),
+         cpu_to_fdt32(v->virtio_blk_dev.irq_num),
+         cpu_to_fdt32(1)}};
+    _FDT(fdt_property(fdt, "interrupt-map", &pci_irq_map, sizeof(pci_irq_map)));
+    _FDT(fdt_end_node(fdt));
 
     /* /psci node */
     _FDT(fdt_begin_node(fdt, "psci"));

@@ -135,6 +135,7 @@ static void pci_mmio_io(void *owner,
                         uint8_t size)
 {
     struct pci *pci = (struct pci *) owner;
+    offset |= 1UL << 31; /* Add enable bit */
     bus_handle_io(&pci->pci_bus, data, is_write, offset, size);
 }
 

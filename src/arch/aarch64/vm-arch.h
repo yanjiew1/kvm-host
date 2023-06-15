@@ -2,6 +2,7 @@
 
 #include <asm/kvm.h>
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct vm vm_t;
 
@@ -31,6 +32,9 @@ typedef struct vm vm_t;
 #define ARM_IOPORT_BASE 0
 #define ARM_IOPORT_SIZE (1UL << 16)
 
+#define ARM_PCI_IO_BASE ARM_IOPORT_BASE
+#define ARM_PCI_IO_SIZE ARM_IOPORT_SIZE
+
 #define ARM_GIC_BASE 0x100000UL
 
 #define ARM_GIC_CPUI_BASE ARM_GIC_BASE
@@ -48,7 +52,7 @@ typedef struct vm vm_t;
 #define ARM_PCI_CFG_BASE 0x40000000UL
 #define ARM_PCI_CFG_SIZE (1UL << 28)
 
-#define ARM_PCI_MMIO_BASE (ARM_PCI_CFG_BASE + ARM_PCI_MMIO_BASE)
+#define ARM_PCI_MMIO_BASE (ARM_PCI_CFG_BASE + ARM_PCI_CFG_SIZE)
 #define ARM_PCI_MMIO_SIZE (DRAM_BASE - ARM_PCI_MMIO_BASE)
 
 #define DRAM_BASE 0x80000000UL
@@ -77,8 +81,8 @@ typedef struct {
 #define ARM_GIC_SPI_BASE 32
 #define ARM_GIC_IRQ_MAX 992
 
-#define VM_IRQ_BASE ARM_GIC_SPI_BASE
-#define VM_IRQ_MAX ARM_GIC_IRQ_MAX
+#define VM_IRQ_BASE 0
+#define VM_IRQ_MAX (ARM_GIC_IRQ_MAX - ARM_GIC_SPI_BASE)
 
 /* Reference https://docs.kernel.org/arm64/booting.html */
 typedef struct {

@@ -68,6 +68,9 @@ int vm_init(vm_t *v)
     if (vm_init_vcpu(v) != 0)
         return -1;
 
+    if (vm_arch_init_platform_devices(v) != 0)
+        return -1;
+
     return 0;
 }
 
@@ -82,11 +85,6 @@ int vm_load_diskimg(vm_t *v, const char *diskimg_file)
 
 int vm_late_init(vm_t *v)
 {
-    if (vm_arch_init_platform_devices(v) != 0)
-        return -1;
-
-    virtio_blk_init(&v->virtio_blk_dev);
-
     if (vm_arch_late_init(v) != 0)
         return -1;
 

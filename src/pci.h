@@ -35,7 +35,8 @@ struct pci_dev {
     struct bus *io_bus;
     struct bus *mmio_bus;
     struct bus *pci_bus;
-    uint64_t mmio_addr;
+    uint8_t bus_num;
+    uint8_t dev_num;
 };
 
 struct pci {

@@ -48,7 +48,7 @@ ifeq ($(ARCH), x86_64)
 endif
 ifeq ($(ARCH), aarch64)
 	OBJS += arch/aarch64/vm.o \
-			arch/x86_64/pci.o \
+			arch/aarch64/pci.o \
 			arch/aarch64/fdt.o
 endif
 
