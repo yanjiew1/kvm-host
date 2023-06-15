@@ -15,6 +15,8 @@
 
 int vm_init(vm_t *v)
 {
+    v->nr_irq = 0;
+
     if ((v->kvm_fd = open("/dev/kvm", O_RDWR)) < 0)
         return throw_err("Failed to open /dev/kvm");
 
@@ -154,6 +156,11 @@ void *vm_guest_to_host(vm_t *v, uint64_t guest)
     if (guest < RAM_BASE)
         return NULL;
     return (void *) ((uintptr_t) v->mem + guest - RAM_BASE);
+}
+
+int vm_irq_alloc(vm_t *v)
+{
+    return v->nr_irq++;
 }
 
 void vm_irqfd_register(vm_t *v, int fd, int gsi, int flags)

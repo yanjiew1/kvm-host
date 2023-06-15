@@ -8,8 +8,9 @@
 #include "virtio-blk.h"
 #include "vm-arch.h"
 
-typedef struct {
+typedef struct vm {
     int kvm_fd, vm_fd, vcpu_fd;
+    int nr_irq;
     void *mem;
     serial_dev_t serial;
     struct bus mmio_bus;
@@ -31,6 +32,7 @@ int vm_load_initrd(vm_t *v, const char *initrd_path);
 int vm_load_diskimg(vm_t *v, const char *diskimg_file);
 int vm_late_init(vm_t *v);
 int vm_run(vm_t *v);
+int vm_irq_alloc(vm_t *v);
 int vm_irq_line(vm_t *v, int irq, int level);
 void *vm_guest_to_host(vm_t *v, uint64_t guest);
 void vm_irqfd_register(vm_t *v, int fd, int gsi, int flags);
