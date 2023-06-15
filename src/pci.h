@@ -19,6 +19,7 @@ union pci_config_address {
     uint32_t value;
 };
 
+#define PCI_CONFIG_MMIO_SIZE (1UL << 16)
 #define PCI_HDR_READ(hdr, offset, width) (*((uint##width##_t *) (hdr + offset)))
 #define PCI_HDR_WRITE(hdr, offset, value, width) \
     ((uint##width##_t *) (hdr + offset))[0] = value
@@ -42,6 +43,7 @@ struct pci {
     struct bus pci_bus;
     struct dev pci_bus_dev;
     struct dev pci_addr_dev;
+    struct dev pci_mmio_dev;
 };
 
 void pci_set_bar(struct pci_dev *dev,
@@ -55,4 +57,4 @@ void pci_dev_init(struct pci_dev *dev,
                   struct pci *pci,
                   struct bus *io_bus,
                   struct bus *mmio_bus);
-void pci_init();
+void pci_init(struct pci *pci);

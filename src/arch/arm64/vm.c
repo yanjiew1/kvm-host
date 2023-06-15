@@ -125,7 +125,9 @@ int vm_arch_init_platform_device(vm_t *v)
     bus_init(&v->mmio_bus);
     dev_init(&v->arch.iodev, ARM_IOPORT_BASE, ARM_IOPORT_SIZE, v, _pio_handler);
     bus_register_dev(&v->mmio_bus, &v->arch.iodev);
-
+    pci_init(&v->pci);
+    v->pci.pci_mmio_dev.base = ARM_PCI_CFG_BASE;
+    bus_register_dev(&v->mmio_bus, &v->pci.pci_mmio_dev);
     if (serial_init(&v->serial, &v->io_bus))
         return throw_err("Failed to init UART device");
 

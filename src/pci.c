@@ -117,6 +117,8 @@ static void pci_config_do_io(void *owner,
         pci_config_read(dev, data, offset, size);
 }
 
+#define PCI_ENABLE_BIT (1UL << 31)
+
 static void pci_data_io(void *owner,
                         void *data,
                         uint8_t is_write,
@@ -125,7 +127,20 @@ static void pci_data_io(void *owner,
 {
     struct pci *pci = (struct pci *) owner;
     uint64_t addr = pci->pci_addr.value | offset;
-    bus_handle_io(&pci->pci_bus, data, is_write, addr, size);
+    if (addr & PCI_ENABLE_BIT) {
+        addr &= ~PCI_ENABLE_BIT;
+        bus_handle_io(&pci->pci_bus, data, is_write, addr, size);
+    }
+}
+
+static void pci_mmio_io(void *owner,
+                        void *data,
+                        uint8_t is_write,
+                        uint64_t offset,
+                        uint8_t size)
+{
+    struct pci *pci = (struct pci *) owner;
+    bus_handle_io(&pci->pci_bus, data, is_write, offset, size);
 }
 
 void pci_set_bar(struct pci_dev *dev,
@@ -163,8 +178,7 @@ void pci_dev_register(struct pci_dev *dev)
 {
     /* FIXEME: It just simplifies the registration on pci bus 0 */
     /* FIXEME: dev_num might exceed 32 */
-    union pci_config_address addr = {.enable_bit = 1,
-                                     .dev_num = dev->pci_bus->dev_num};
+    union pci_config_address addr = {.dev_num = dev->pci_bus->dev_num};
     dev_init(&dev->config_dev, addr.value, PCI_CFG_SPACE_SIZE, dev,
              pci_config_do_io);
     bus_register_dev(dev->pci_bus, &dev->config_dev);
@@ -173,13 +187,12 @@ void pci_dev_register(struct pci_dev *dev)
 #define PCI_CONFIG_ADDR 0xCF8
 #define PCI_CONFIG_DATA 0xCFC
 
-void pci_init(struct pci *pci, struct bus *io_bus)
+void pci_init(struct pci *pci)
 {
     dev_init(&pci->pci_addr_dev, PCI_CONFIG_ADDR, sizeof(uint32_t), pci,
              pci_address_io);
     dev_init(&pci->pci_bus_dev, PCI_CONFIG_DATA, sizeof(uint32_t), pci,
              pci_data_io);
+    dev_init(&pci->pci_mmio_dev, 0, PCI_CONFIG_MMIO_SIZE, pci, pci_mmio_io);
     bus_init(&pci->pci_bus);
-    bus_register_dev(io_bus, &pci->pci_addr_dev);
-    bus_register_dev(io_bus, &pci->pci_bus_dev);
 }

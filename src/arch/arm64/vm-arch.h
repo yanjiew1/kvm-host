@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "bus.h"
+#include "pci.h"
 
 typedef struct vm vm_t;
 
@@ -62,7 +62,7 @@ struct vm_arch {
 #define ARM_GIC_ITS_SIZE KVM_VGIC_V3_ITS_SIZE
 
 #define ARM_PCI_CFG_BASE 0x40000000UL
-#define ARM_PCI_CFG_SIZE (1UL << 28)
+#define ARM_PCI_CFG_SIZE PCI_CONFIG_MMIO_SIZE
 
 #define ARM_PCI_MMIO_BASE (ARM_PCI_CFG_BASE + ARM_PCI_CFG_SIZE)
 #define ARM_PCI_MMIO_SIZE (RAM_BASE - ARM_PCI_MMIO_BASE)
