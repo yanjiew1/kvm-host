@@ -15,6 +15,8 @@
     } while (0)
 
 #define FDT_PHANDLE_GIC 1
+#define FDT_PCI_IO_SPACE 0x01000000L
+#define FDT_PCI_MMIO_SPACE 0x02000000L
 
 int vm_arch_generate_fdt(vm_t *v)
 {
@@ -117,6 +119,51 @@ int vm_arch_generate_fdt(vm_t *v)
     _FDT(fdt_property_cell(fdt, "cpu_on", PSCI_0_2_FN64_CPU_ON));
     _FDT(fdt_property_cell(fdt, "migrate", PSCI_0_2_FN64_MIGRATE));
     _FDT(fdt_end_node(fdt));
+
+    /* /pci node */
+    _FDT(fdt_begin_node(fdt, "pci"));
+    _FDT(fdt_property_string(fdt, "device_type", "pci"));
+    _FDT(fdt_property_cell(fdt, "#address-cells", 3));
+    _FDT(fdt_property_cell(fdt, "#size-cells", 2));
+    _FDT(fdt_property_cell(fdt, "#interrupt-cells", 1));
+    _FDT(fdt_property_string(fdt, "compatible", "pci-host-cam-generic"));
+    _FDT(fdt_property(fdt, "dma-coherent", NULL, 0));
+    uint32_t pci_bus_range[] = {cpu_to_fdt32(0), cpu_to_fdt32(0)};
+    _FDT(fdt_property(fdt, "bus-range", &pci_bus_range, sizeof(pci_bus_range)));
+    uint64_t pci_reg[] = {cpu_to_fdt64(ARM_PCI_CFG_BASE),
+                          cpu_to_fdt64(ARM_PCI_CFG_SIZE)};
+    _FDT(fdt_property(fdt, "reg", &pci_reg, sizeof(pci_reg)));
+    struct {
+        uint32_t pci_hi;
+        uint64_t pci_addr;
+        uint64_t cpu_addr;
+        uint64_t size;
+    } __attribute__((packed)) pci_ranges[] = {
+        {cpu_to_fdt32(FDT_PCI_MMIO_SPACE), cpu_to_fdt64(ARM_PCI_MMIO_BASE),
+         cpu_to_fdt64(ARM_PCI_MMIO_BASE),
+         cpu_to_fdt64(ARM_PCI_MMIO_SIZE)}, /* For MMIO */
+    };
+    _FDT(fdt_property(fdt, "ranges", &pci_ranges, sizeof(pci_ranges)));
+    /* Currently only virtio-blk device */
+    struct virtio_blk_dev *virtio_blk = &v->virtio_blk_dev;
+    struct pci_dev *virtio_blk_pci = (struct pci_dev *) virtio_blk;
+    struct {
+        uint32_t pci_hi;
+        uint64_t pci_addr;
+        uint32_t pci_irq;
+        uint32_t intc;
+        uint64_t intc_addr;
+        uint32_t gic_type;
+        uint32_t gic_irqn;
+        uint32_t gic_irq_type;
+    } __attribute__((packed)) pci_irq_map[] = {
+        {cpu_to_fdt32(virtio_blk_pci->config_dev.base & ~(1UL << 31)), 0,
+         cpu_to_fdt32(1), cpu_to_fdt32(FDT_PHANDLE_GIC), 0,
+         cpu_to_fdt32(ARM_FDT_IRQ_TYPE_SPI),
+         cpu_to_fdt32(v->virtio_blk_dev.irq_num),
+         cpu_to_fdt32(ARM_FDT_IRQ_EDGE_TRIGGER)}};
+    _FDT(fdt_property(fdt, "interrupt-map", &pci_irq_map, sizeof(pci_irq_map)));
+    _FDT(fdt_end_node(fdt)); /* /pci */
 
     /* finalize */
     _FDT(fdt_end_node(fdt));
