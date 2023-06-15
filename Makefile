@@ -37,6 +37,13 @@ ifeq ($(ARCH), x86_64)
 	CFLAGS += -I$(PWD)/src/arch/x86
 	OBJS += arch/x86/vm.o
 endif
+ifeq ($(ARCH), aarch64)
+	CFLAGS += -I$(PWD)/src/arch/arm64 \
+			  $(FDT_CFLAGS)
+	OBJS += arch/arm64/vm.o \
+			arch/arm64/fdt.o \
+			$(FDT_OBJS)
+endif
 
 OBJS := $(addprefix $(OUT)/,$(OBJS))
 deps := $(OBJS:%.o=%.o.d)

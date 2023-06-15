@@ -18,6 +18,7 @@ typedef struct vm {
     struct pci pci;
     struct diskimg diskimg;
     struct virtio_blk_dev virtio_blk_dev;
+    struct vm_arch arch;
 } vm_t;
 
 int vm_arch_init(vm_t *v);
