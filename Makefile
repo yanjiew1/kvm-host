@@ -15,6 +15,13 @@ BIN = $(OUT)/kvm-host
 
 all: $(BIN)
 
+FDT_OBJS := \
+	fdt/fdt.o \
+	fdt/fdt_sw.o \
+	fdt/fdt_strerror.o
+
+FDT_CFLAGS := -I$(PWD)/src/fdt
+
 OBJS := \
 	vm.o \
 	serial.o \
